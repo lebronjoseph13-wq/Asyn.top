@@ -1,0 +1,533 @@
+-- Wait for the game to load up properly, sugar
+if not game:IsLoaded() then game.Loaded:Wait() end
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+while not LocalPlayer do
+    Players.PlayerAdded:Wait()
+    LocalPlayer = Players.LocalPlayer
+end
+-- Global toggle states
+local goonEnabled = false
+local uiVisible = true
+local visualsEnabled = false
+local espSettings = {
+    boxes = true,
+    names = true,
+    health = true,
+    boxColor = Color3.fromRGB(255, 0, 100),
+    nameColor = Color3.fromRGB(255, 255, 255),
+    fontSize = 12
+}
+-- =========================================================
+-- 0. Platform Sniffer
+-- =========================================================
+local function getPlatform()
+    if UserInputService.VREnabled then return "VR"
+    elseif UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then return "Mobile"
+    elseif UserInputService.GamepadEnabled and not UserInputService.KeyboardEnabled and not UserInputService.MouseEnabled then return "Console"
+    else return "PC" end
+end
+local currentPlatform = getPlatform()
+-- =========================================================
+-- 1. Sleek GUI Creation
+-- =========================================================
+local ScreenGui
+local function getSafeUIParent()
+    if type(gethui) == "function" then
+        return gethui()
+    end
+    local success = pcall(function()
+        local test = Instance.new("ScreenGui")
+        test.Parent = CoreGui
+        test:Destroy()
+    end)
+    if success then return CoreGui end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
+local safeParent = getSafeUIParent()
+local function createGuis()
+    local oldGui = safeParent:FindFirstChild("GoonInfoGui")
+    if oldGui then oldGui:Destroy() end
+    -- Also try to clean up from PlayerGui just in case it was there before
+    local oldGui2 = LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("GoonInfoGui")
+    if oldGui2 then oldGui2:Destroy() end
+    ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "GoonInfoGui"
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.IgnoreGuiInset = true 
+    ScreenGui.Parent = safeParent
+    -- Master Toggle Button (Middle Left)
+    local MasterToggleBtn = Instance.new("TextButton")
+    MasterToggleBtn.Size = UDim2.new(0, 120, 0, 30)
+    MasterToggleBtn.Position = UDim2.new(0, 15, 0.5, -15)
+    MasterToggleBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    MasterToggleBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+    MasterToggleBtn.TextSize = 14
+    MasterToggleBtn.Font = Enum.Font.Code
+    MasterToggleBtn.Text = currentPlatform == "PC" and "[K] Toggle UI" or "Toggle UI"
+    MasterToggleBtn.Parent = ScreenGui
+    Instance.new("UICorner", MasterToggleBtn).CornerRadius = UDim.new(0, 4)
+    -- The Intel Frame
+    local InfoFrame = Instance.new("Frame")
+    InfoFrame.Size = UDim2.new(0, 240, 0, 80)
+    InfoFrame.Position = UDim2.new(0, 15, 0, 45) 
+    InfoFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    InfoFrame.BorderSizePixel = 0
+    InfoFrame.Parent = ScreenGui
+    Instance.new("UICorner", InfoFrame).CornerRadius = UDim.new(0, 6)
+    local InfoLabel = Instance.new("TextLabel")
+    InfoLabel.Size = UDim2.new(1, -20, 1, -20)
+    InfoLabel.Position = UDim2.new(0, 10, 0, 10)
+    InfoLabel.BackgroundTransparency = 1
+    InfoLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+    InfoLabel.TextSize = 14
+    InfoLabel.Font = Enum.Font.Code
+    InfoLabel.TextXAlignment = Enum.TextXAlignment.Left
+    InfoLabel.TextYAlignment = Enum.TextYAlignment.Top
+    InfoLabel.Text = string.format("HOST: %s\nID: %d\nPLATFORM: %s", LocalPlayer.Name, LocalPlayer.UserId, currentPlatform)
+    InfoLabel.Parent = InfoFrame
+    -- Container for Toggles
+    local TogglesFrame = Instance.new("Frame")
+    TogglesFrame.Size = UDim2.new(0, 240, 0, 95)
+    TogglesFrame.Position = UDim2.new(0, 15, 0, 135)
+    TogglesFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    TogglesFrame.BorderSizePixel = 0
+    TogglesFrame.Parent = ScreenGui
+    Instance.new("UICorner", TogglesFrame).CornerRadius = UDim.new(0, 6)
+    -- Goon Toggle
+    local ToggleButton = Instance.new("TextButton")
+    ToggleButton.Size = UDim2.new(1, -20, 0, 30)
+    ToggleButton.Position = UDim2.new(0, 10, 0, 10)
+    ToggleButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    ToggleButton.TextColor3 = Color3.fromRGB(220, 220, 220)
+    ToggleButton.TextSize = 14
+    ToggleButton.Font = Enum.Font.Code
+    ToggleButton.Text = "Goon: OFF"
+    ToggleButton.Parent = TogglesFrame
+    Instance.new("UICorner", ToggleButton).CornerRadius = UDim.new(0, 4)
+    ToggleButton.MouseButton1Click:Connect(function()
+        goonEnabled = not goonEnabled
+        if goonEnabled then
+            ToggleButton.Text = "Goon: ON"
+            ToggleButton.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
+            ToggleButton.TextColor3 = Color3.fromRGB(15, 15, 15)
+        else
+            ToggleButton.Text = "Goon: OFF"
+            ToggleButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+            ToggleButton.TextColor3 = Color3.fromRGB(220, 220, 220)
+        end
+    end)
+    -- Visuals Toggle
+    local VisualsBtn = Instance.new("TextButton")
+    VisualsBtn.Size = UDim2.new(1, -20, 0, 30)
+    VisualsBtn.Position = UDim2.new(0, 10, 0, 50)
+    VisualsBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    VisualsBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+    VisualsBtn.TextSize = 14
+    VisualsBtn.Font = Enum.Font.Code
+    VisualsBtn.Text = "Visuals: OFF"
+    VisualsBtn.Parent = TogglesFrame
+    Instance.new("UICorner", VisualsBtn).CornerRadius = UDim.new(0, 4)
+    VisualsBtn.MouseButton1Click:Connect(function()
+        visualsEnabled = not visualsEnabled
+        if visualsEnabled then
+            VisualsBtn.Text = "Visuals: ON"
+            VisualsBtn.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
+            VisualsBtn.TextColor3 = Color3.fromRGB(15, 15, 15)
+        else
+            VisualsBtn.Text = "Visuals: OFF"
+            VisualsBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+            VisualsBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+        end
+    end)
+    -- --- COLOR WHEEL FRAME ---
+    local ColorFrame = Instance.new("Frame")
+    ColorFrame.Size = UDim2.new(0, 240, 0, 110)
+    ColorFrame.Position = UDim2.new(0, 15, 0, 240)
+    ColorFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    ColorFrame.BorderSizePixel = 0
+    ColorFrame.Parent = ScreenGui
+    Instance.new("UICorner", ColorFrame).CornerRadius = UDim.new(0, 6)
+    local ColorTitle = Instance.new("TextLabel")
+    ColorTitle.Size = UDim2.new(1, -20, 0, 20)
+    ColorTitle.Position = UDim2.new(0, 10, 0, 10)
+    ColorTitle.BackgroundTransparency = 1
+    ColorTitle.TextColor3 = Color3.fromRGB(220, 220, 220)
+    ColorTitle.TextSize = 14
+    ColorTitle.Font = Enum.Font.Code
+    ColorTitle.TextXAlignment = Enum.TextXAlignment.Center
+    ColorTitle.Text = "ESP Color Pickers"
+    ColorTitle.Parent = ColorFrame
+    -- Helper to make sliders
+    local function makeHueSlider(name, yPos, targetSetting)
+        local Label = Instance.new("TextLabel")
+        Label.Size = UDim2.new(0, 60, 0, 20)
+        Label.Position = UDim2.new(0, 10, 0, yPos)
+        Label.BackgroundTransparency = 1
+        Label.TextColor3 = Color3.fromRGB(220, 220, 220)
+        Label.TextSize = 12
+        Label.Font = Enum.Font.Code
+        Label.TextXAlignment = Enum.TextXAlignment.Left
+        Label.Text = name
+        Label.Parent = ColorFrame
+        local SliderBg = Instance.new("Frame")
+        SliderBg.Size = UDim2.new(1, -90, 0, 10)
+        SliderBg.Position = UDim2.new(0, 70, 0, yPos + 5)
+        SliderBg.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        SliderBg.BorderSizePixel = 0
+        SliderBg.Parent = ColorFrame
+        
+        local UIGradient = Instance.new("UIGradient")
+        UIGradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+            ColorSequenceKeypoint.new(0.16, Color3.fromRGB(255, 255, 0)),
+            ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 255, 0)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 255, 255)),
+            ColorSequenceKeypoint.new(0.66, Color3.fromRGB(0, 0, 255)),
+            ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255, 0, 255)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
+        })
+        UIGradient.Parent = SliderBg
+        Instance.new("UICorner", SliderBg).CornerRadius = UDim.new(1, 0)
+        local SliderKnob = Instance.new("Frame")
+        SliderKnob.Size = UDim2.new(0, 14, 0, 14)
+        SliderKnob.Position = UDim2.new(0, -2, 0.5, -7)
+        SliderKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        SliderKnob.Parent = SliderBg
+        Instance.new("UICorner", SliderKnob).CornerRadius = UDim.new(1, 0)
+        local Stroke = Instance.new("UIStroke", SliderKnob)
+        Stroke.Color = Color3.fromRGB(0, 0, 0)
+        Stroke.Thickness = 1
+        local dragging = false
+        SliderKnob.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+            end
+        end)
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                local mousePos = UserInputService:GetMouseLocation().X
+                local bgAbsPos = SliderBg.AbsolutePosition.X
+                local bgAbsSize = SliderBg.AbsoluteSize.X
+                local pct = math.clamp((mousePos - bgAbsPos) / bgAbsSize, 0, 1)
+                SliderKnob.Position = UDim2.new(pct, -7, 0.5, -7)
+                
+                local hue = pct
+                local newColor = Color3.fromHSV(hue, 1, 1)
+                espSettings[targetSetting] = newColor
+                SliderKnob.BackgroundColor3 = newColor
+            end
+        end)
+        
+        -- init color
+        local initialHue = (targetSetting == "boxColor" and 0.9 or 0)
+        SliderKnob.Position = UDim2.new(initialHue, -7, 0.5, -7)
+        local initC = Color3.fromHSV(initialHue, 1, 1)
+        espSettings[targetSetting] = initC
+        SliderKnob.BackgroundColor3 = initC
+    end
+    makeHueSlider("Box Col", 40, "boxColor")
+    makeHueSlider("Name Col", 70, "nameColor")
+    -- Master Visibility Logic
+    local function updateUIVisibility()
+        InfoFrame.Visible = uiVisible
+        TogglesFrame.Visible = uiVisible
+        ColorFrame.Visible = uiVisible
+    end
+    MasterToggleBtn.MouseButton1Click:Connect(function()
+        uiVisible = not uiVisible
+        updateUIVisibility()
+    end)
+    if currentPlatform == "PC" then
+        UserInputService.InputBegan:Connect(function(input, gameProcessed)
+            if gameProcessed then return end
+            if input.KeyCode == Enum.KeyCode.K then
+                uiVisible = not uiVisible
+                updateUIVisibility()
+            end
+        end)
+    end
+end
+createGuis()
+-- =========================================================
+-- 2. Goon Logic (Aimbot Injection)
+-- =========================================================
+-- Added timeouts to WaitForChild so it doesn't yield forever if modules don't exist
+local success, utility = pcall(function()
+    local modules = ReplicatedStorage:WaitForChild("Modules", 3)
+    if modules then
+        return require(modules:WaitForChild("Utility", 3))
+    end
+    return nil
+end)
+if not success or not utility then
+    warn("Goon script failed to find ReplicatedStorage.Modules.Utility! Aimbot features may be disabled, but Visuals will still work.")
+end
+local get_players = function()
+    local entities = {}
+    for _, child in ipairs(workspace:GetChildren()) do
+        if child:FindFirstChildOfClass("Humanoid") then
+            table.insert(entities, child)
+        elseif child.Name == "HurtEffect" then
+            for _, hurt_player in ipairs(child:GetChildren()) do
+                if hurt_player.ClassName ~= "Highlight" then
+                    table.insert(entities, hurt_player)
+                end
+            end
+        end
+    end
+    return entities
+end
+local get_closest_player = function()
+    local closest, closest_distance = nil, math.huge
+    local character = LocalPlayer.Character
+    if character == nil then return nil end
+    for _, player_char in ipairs(get_players()) do
+        if player_char == character then continue end
+        if not player_char:FindFirstChild("HumanoidRootPart") then continue end
+        local position, on_screen = Camera:WorldToViewportPoint(player_char.HumanoidRootPart.Position)
+        if not on_screen then continue end
+        local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+        local distance = (center - Vector2.new(position.X, position.Y)).Magnitude
+        if distance > closest_distance then continue end
+        closest = player_char
+        closest_distance = distance
+    end
+    return closest
+end
+if utility and type(utility) == "table" and utility.Raycast then
+    local old_raycast = utility.Raycast
+    utility.Raycast = function(...)
+        local arguments = {...}
+        if goonEnabled and #arguments > 0 and arguments[4] == 999 then
+            local closest = get_closest_player()
+            if closest and closest:FindFirstChild("Head") then
+                arguments[3] = closest.Head.Position
+            end
+        end
+        return old_raycast(table.unpack(arguments))
+    end
+end
+-- =========================================================
+-- 3. God-Eyes (ESP) Logic
+-- =========================================================
+local espCache = {}
+local ESPFolder = Instance.new("Folder")
+ESPFolder.Name = "ESP_Container"
+ESPFolder.Parent = ScreenGui
+local function buildESP(player)
+    if espCache[player] then return end
+    
+    local data = {}
+    
+    data.boxOuter = Instance.new("Frame")
+    data.boxOuter.BackgroundTransparency = 1
+    data.boxOuter.Visible = false
+    data.boxOuter.Parent = ESPFolder
+    
+    local strokeOuter = Instance.new("UIStroke")
+    strokeOuter.Color = Color3.new(0, 0, 0)
+    strokeOuter.Thickness = 2.5
+    strokeOuter.LineJoinMode = Enum.LineJoinMode.Miter
+    strokeOuter.Parent = data.boxOuter
+    
+    data.boxInner = Instance.new("Frame")
+    data.boxInner.BackgroundTransparency = 1
+    data.boxInner.Size = UDim2.new(1, 0, 1, 0)
+    data.boxInner.Parent = data.boxOuter
+    
+    local strokeInner = Instance.new("UIStroke")
+    strokeInner.Thickness = 1
+    strokeInner.LineJoinMode = Enum.LineJoinMode.Miter
+    strokeInner.Parent = data.boxInner
+    data.boxInnerStroke = strokeInner 
+    
+    data.name = Instance.new("TextLabel")
+    data.name.BackgroundTransparency = 1
+    data.name.Font = Enum.Font.GothamBold
+    data.name.AnchorPoint = Vector2.new(0.5, 1) 
+    data.name.Visible = false
+    data.name.Parent = ESPFolder
+    
+    local nameStroke = Instance.new("UIStroke")
+    nameStroke.Color = Color3.new(0, 0, 0)
+    nameStroke.Thickness = 1.2
+    nameStroke.Parent = data.name
+    
+    data.healthBg = Instance.new("Frame")
+    data.healthBg.BackgroundColor3 = Color3.new(0, 0, 0)
+    data.healthBg.BorderSizePixel = 1
+    data.healthBg.BorderColor3 = Color3.new(0, 0, 0)
+    data.healthBg.AnchorPoint = Vector2.new(1, 0) 
+    data.healthBg.Visible = false
+    data.healthBg.Parent = ESPFolder
+    
+    data.healthBar = Instance.new("Frame")
+    data.healthBar.BorderSizePixel = 0
+    data.healthBar.AnchorPoint = Vector2.new(0, 1) 
+    data.healthBar.Position = UDim2.new(0, 1, 1, -1)
+    data.healthBar.Parent = data.healthBg
+    data.healthText = Instance.new("TextLabel")
+    data.healthText.BackgroundTransparency = 1
+    data.healthText.Font = Enum.Font.GothamBold
+    data.healthText.TextSize = 10
+    data.healthText.TextColor3 = Color3.new(1, 1, 1)
+    data.healthText.AnchorPoint = Vector2.new(1, 0.5) 
+    data.healthText.Visible = false
+    data.healthText.Parent = ESPFolder
+    local hpStroke = Instance.new("UIStroke")
+    hpStroke.Color = Color3.new(0, 0, 0)
+    hpStroke.Thickness = 1
+    hpStroke.Parent = data.healthText
+    
+    espCache[player] = data
+end
+local function removeESP(player)
+    if espCache[player] then
+        espCache[player].boxOuter:Destroy()
+        espCache[player].name:Destroy()
+        espCache[player].healthBg:Destroy()
+        espCache[player].healthText:Destroy()
+        espCache[player] = nil
+    end
+end
+for _, p in ipairs(Players:GetPlayers()) do
+    if p ~= LocalPlayer then buildESP(p) end
+end
+Players.PlayerAdded:Connect(function(p)
+    if p ~= LocalPlayer then buildESP(p) end
+end)
+Players.PlayerRemoving:Connect(removeESP)
+local function getCharBoundingBox(char)
+    local minX, minY = math.huge, math.huge
+    local maxX, maxY = -math.huge, -math.huge
+    local hasParts = false
+    for _, part in ipairs(char:GetChildren()) do
+        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+            local size = part.Size / 2
+            local cf = part.CFrame
+            local corners = {
+                cf * CFrame.new(size.X, size.Y, size.Z).Position,
+                cf * CFrame.new(size.X, size.Y, -size.Z).Position,
+                cf * CFrame.new(size.X, -size.Y, size.Z).Position,
+                cf * CFrame.new(size.X, -size.Y, -size.Z).Position,
+                cf * CFrame.new(-size.X, size.Y, size.Z).Position,
+                cf * CFrame.new(-size.X, size.Y, -size.Z).Position,
+                cf * CFrame.new(-size.X, -size.Y, size.Z).Position,
+                cf * CFrame.new(-size.X, -size.Y, -size.Z).Position
+            }
+            for _, corner in ipairs(corners) do
+                local pos = Camera:WorldToViewportPoint(corner)
+                if pos.Z > 0 then 
+                    hasParts = true
+                    if pos.X < minX then minX = pos.X end
+                    if pos.X > maxX then maxX = pos.X end
+                    if pos.Y < minY then minY = pos.Y end
+                    if pos.Y > maxY then maxY = pos.Y end
+                end
+            end
+        end
+    end
+    
+    if hasParts then return minX, minY, maxX, maxY end
+    return nil
+end
+RunService.RenderStepped:Connect(function()
+    for player, data in pairs(espCache) do
+        if not visualsEnabled then
+            data.boxOuter.Visible = false
+            data.name.Visible = false
+            data.healthBg.Visible = false
+            data.healthText.Visible = false
+            continue
+        end
+        local char = player.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChild("Humanoid")
+        if hrp and hum and hum.Health > 0 then
+            local rootPos = Camera:WorldToViewportPoint(hrp.Position)
+            if rootPos.Z > 0 then
+                local minX, minY, maxX, maxY = getCharBoundingBox(char)
+                if minX then
+                    minX = minX - 2
+                    minY = minY - 2
+                    local width = (maxX - minX) + 4
+                    local height = (maxY - minY) + 4
+                    if espSettings.boxes then
+                        data.boxOuter.Size = UDim2.new(0, width, 0, height)
+                        data.boxOuter.Position = UDim2.new(0, minX, 0, minY)
+                        data.boxInnerStroke.Color = espSettings.boxColor
+                        data.boxOuter.Visible = true
+                    else
+                        data.boxOuter.Visible = false
+                    end
+                    if espSettings.names then
+                        local dist = math.floor((Camera.CFrame.Position - hrp.Position).Magnitude)
+                        data.name.Text = string.format("%s [%dm]", player.Name, dist)
+                        data.name.Position = UDim2.new(0, minX + width/2, 0, minY - 5)
+                        data.name.TextColor3 = espSettings.nameColor
+                        data.name.TextSize = espSettings.fontSize
+                        data.name.Visible = true
+                    else
+                        data.name.Visible = false
+                    end
+                    if espSettings.health then
+                        local hpPct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+                        data.healthBg.Size = UDim2.new(0, 4, 0, height)
+                        data.healthBg.Position = UDim2.new(0, minX - 4, 0, minY)
+                        
+                        local fillHeight = math.max((height - 2) * hpPct, 1)
+                        data.healthBar.Size = UDim2.new(1, -2, 0, fillHeight)
+                        -- Dynamic health color logic (Green > 75, Yellow 50-74, Red < 50)
+                        local hpColor
+                        if hpPct >= 0.75 then
+                            hpColor = Color3.fromRGB(0, 255, 0)
+                        elseif hpPct >= 0.50 then
+                            hpColor = Color3.fromRGB(255, 255, 0)
+                        else
+                            hpColor = Color3.fromRGB(255, 0, 0)
+                        end
+                        data.healthBar.BackgroundColor3 = hpColor
+                        data.healthBg.Visible = true
+                        if hpPct < 1 then
+                            data.healthText.Text = tostring(math.floor(hum.Health))
+                            data.healthText.Position = UDim2.new(0, minX - 10, 0, minY + height * (1 - hpPct))
+                            data.healthText.TextColor3 = hpColor
+                            data.healthText.Visible = true
+                        else
+                            data.healthText.Visible = false
+                        end
+                    else
+                        data.healthBg.Visible = false
+                        data.healthText.Visible = false
+                    end
+                else
+                    data.boxOuter.Visible = false
+                    data.name.Visible = false
+                    data.healthBg.Visible = false
+                    data.healthText.Visible = false
+                end
+            else
+                data.boxOuter.Visible = false
+                data.name.Visible = false
+                data.healthBg.Visible = false
+                data.healthText.Visible = false
+            end
+        else
+            data.boxOuter.Visible = false
+            data.name.Visible = false
+            data.healthBg.Visible = false
+            data.healthText.Visible = false
+        end
+    end
+end)
